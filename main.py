@@ -10,14 +10,14 @@ from requests_html import HTMLSession
 #INPUT = "https://www.google.com"
 INPUT = "http://127.0.0.1:8000/home/"
 class crawler:
-    def __init__(self, root_url, logout_url="\\\\") -> None:
+    def __init__(self, root_url, login_required=False, login_username=None, login_password=None, logout_url="\\\\") -> None:
         self.root_url = root_url
         self.logout_url = logout_url
         self.visited = set()
         self.visit_queue = set()
         self.visit_queue.add(root_url)
         self.target_domain = str()
-        self.session = None
+        self.session = HTMLSession()
 
         # Parse the target url so we know what domain we are targeting
         target_url_parsed = urlparse(self.root_url)
@@ -26,17 +26,19 @@ class crawler:
         else:
             self.target_domain = target_url_parsed.netloc
         print(self.target_domain)
-        self.login()
 
-    def login(self):
+        # Login if the web app requires login
+        if login_required:
+            self.__login(login_username, login_password)
+
+    def __login(self, username, password, email=""):
         #self.session = requests.Session()
-        self.session = HTMLSession()
         self.session.get(self.root_url)
         if 'csrftoken' in self.session.cookies:
             csrftoken = self.session.cookies['csrftoken']
-        else:
+        elif 'csrf':
             csrftoken = self.session.cookies['csrf']
-        login_data = dict(username='hamid', password='12345', csrfmiddlewaretoken=csrftoken)
+        login_data = dict(username=username, password=password, csrfmiddlewaretoken=csrftoken)
         r = self.session.post(self.root_url, data=login_data, headers=dict(Referer=self.root_url))
         print(self.session.cookies.get_dict())
 
@@ -44,11 +46,11 @@ class crawler:
     def handler(self):
         while len(self.visit_queue) > 0:
             url_to_visit = self.visit_queue.pop()
-            self.engine(url_to_visit)
+            self.__engine(url_to_visit)
             self.visited.add(url_to_visit)
 
 
-    def engine(self, cur_url):
+    def __engine(self, cur_url):
         # Do not visit logout url
         if self.logout_url in cur_url:
             return
@@ -101,7 +103,7 @@ class crawler:
 
 
 def __main__():
-    a = crawler(INPUT,"logout")
+    a = crawler(INPUT,True,"hamid","12345","logout")
     a.handler()
 
 __main__()
