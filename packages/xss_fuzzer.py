@@ -64,6 +64,7 @@ class XSS_TEST:
                 
                 inputs_value[input_name] = payload
 
+            # TODO: Submit form and check if the result show XSS vulnerability 
             # Make request and test the payload
             #r = self.session.post(self.root_url, data=inputs_value, headers=dict(Referer=self.root_url))
             print(inputs_value)
