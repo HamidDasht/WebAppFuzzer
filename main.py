@@ -2,10 +2,9 @@ import requests, os
 from urllib.parse import urlparse
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
-import http.cookiejar
 from http.cookiejar import LWPCookieJar
 from requests_html import HTMLSession
-
+from packages.xss_fuzzer import XSS_TEST
 
 #INPUT = "https://www.google.com"
 INPUT = "http://127.0.0.1:8000/home/"
@@ -18,6 +17,8 @@ class crawler:
         self.visit_queue.add(root_url)
         self.target_domain = str()
         self.session = HTMLSession()
+
+        self.xss_fuzzer = None
 
         # Parse the target url so we know what domain we are targeting
         target_url_parsed = urlparse(self.root_url)
@@ -38,7 +39,10 @@ class crawler:
             csrftoken = self.session.cookies['csrftoken']
         elif 'csrf':
             csrftoken = self.session.cookies['csrf']
-        login_data = dict(username=username, password=password, csrfmiddlewaretoken=csrftoken)
+        if 'csrftoken' or 'csrf':
+            login_data = dict(username=username, password=password, csrfmiddlewaretoken=csrftoken)
+        else:
+            login_data = dict(username=username, password=password)
         r = self.session.post(self.root_url, data=login_data, headers=dict(Referer=self.root_url))
         print(self.session.cookies.get_dict())
 
@@ -48,13 +52,15 @@ class crawler:
             url_to_visit = self.visit_queue.pop()
             self.__engine(url_to_visit)
             self.visited.add(url_to_visit)
-
+        
+        self.xss_fuzzer = XSS_TEST(self.visited, self.session)
+        self.xss_fuzzer.handler()
 
     def __engine(self, cur_url):
         # Do not visit logout url
         if self.logout_url in cur_url:
             return
-        print("visitng url {}".format(cur_url))
+        #print("visitng url {}".format(cur_url))
         """
         Result contains html in res.content among other 
         things like status code (res.status_code), etc. """
@@ -106,4 +112,5 @@ def __main__():
     a = crawler(INPUT,True,"hamid","12345","logout")
     a.handler()
 
-__main__()
+if __name__ == '__main__':
+    __main__()
