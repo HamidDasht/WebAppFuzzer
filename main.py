@@ -1,16 +1,17 @@
 import requests, os
 from urllib.parse import urlparse
 from urllib.parse import urljoin
-from bs4 import BeautifulSoup
-from http.cookiejar import LWPCookieJar
 from requests_html import HTMLSession
+from bs4 import BeautifulSoup
 from packages.xss_fuzzer import XSS_TEST
 
 #INPUT = "https://www.google.com"
-INPUT = "http://127.0.0.1:8000/home/"
+#INPUT = "http://127.0.0.1:8000/home/"
+INPUT = "http://192.168.88.129/dvwa/index.php"
 class crawler:
-    def __init__(self, root_url, login_required=False, login_username=None, login_password=None, logout_url="\\\\") -> None:
+    def __init__(self, root_url, login_required=False, login_url="", login_username=None, login_password=None, logout_url="\\\\") -> None:
         self.root_url = root_url
+        self.login_url = login_url
         self.logout_url = logout_url
         self.visited = set()
         self.visit_queue = set()
@@ -34,33 +35,81 @@ class crawler:
 
     def __login(self, username, password, email=""):
         #self.session = requests.Session()
-        self.session.get(self.root_url)
+        resp = self.session.get(self.login_url)
+
+        
+        soup = BeautifulSoup(resp.content, 'lxml')
+        forms = soup.find_all('form')
+        for form in forms:
+            inputs = form.find_all('input')
+            for input in inputs:
+                try:
+                    input_name = str(input["name"])
+                except:
+                    continue
+                if "token" in input_name or "csrf" in input_name:
+                    form_csrf = input["value"]
+                    csrftoken = form_csrf
+                    break
+        
+        """
         if 'csrftoken' in self.session.cookies:
             csrftoken = self.session.cookies['csrftoken']
-        elif 'csrf':
+        elif 'csrf' in self.session.cookies:
             csrftoken = self.session.cookies['csrf']
-        if 'csrftoken' or 'csrf':
+        elif 'user_token' in self.session.cookies:
+            csrftoken = self.session.cookies['user_token']
+        if 'csrftoken' in self.session.cookies or 'csrf' in self.session.cookies:
             login_data = dict(username=username, password=password, csrfmiddlewaretoken=csrftoken)
+        elif 'user_token' in self.session.cookies:
+            login_data = dict(username=username, password=password, user_token=csrftoken, Login="Login")
         else:
             login_data = dict(username=username, password=password)
-        r = self.session.post(self.root_url, data=login_data, headers=dict(Referer=self.root_url))
+        """
+        login_data = dict(username=username, password=password, user_token=csrftoken, Login="Login")
+        print(login_data)
+        r = self.session.post(self.login_url, data=login_data, headers=dict(Referer=self.login_url))
         print(self.session.cookies.get_dict())
 
+        # Change security to low
+        resp = self.session.get("http://192.168.88.129/dvwa/security.php")
+        
+        soup = BeautifulSoup(resp.content, 'lxml')
+        forms = soup.find_all('form')
+        for form in forms:
+            inputs = form.find_all('input')
+            for input in inputs:
+                try:
+                    input_name = str(input["name"])
+                except:
+                    continue
+                if "token" in input_name or "csrf" in input_name:
+                    form_csrf = input["value"]
+                    csrftoken = form_csrf
+                    break
+            
+        login_data = dict(security='low', seclev_submit='Submit', user_token=csrftoken)
+        self.session.post("http://192.168.88.129/dvwa/security.php", data=login_data, headers=dict(Referer=self.root_url))
+        print(self.session.cookies.get_dict())
+        print(self.session.get("http://192.168.88.129/dvwa/vulnerabilities/xss_r/?name=<script>document.title=\'empty\';</script>#").html.render())
+        exit()
 
     def handler(self):
         while len(self.visit_queue) > 0:
             url_to_visit = self.visit_queue.pop()
-            self.__engine(url_to_visit)
-            self.visited.add(url_to_visit)
-        
+            if self.__engine(url_to_visit) != -1:
+                self.visited.add(url_to_visit)
+            if len(self.visited) > 20:
+                break
+        print(self.visited)
         self.xss_fuzzer = XSS_TEST(self.visited, self.session)
         self.xss_fuzzer.handler()
 
     def __engine(self, cur_url):
         # Do not visit logout url
-        if self.logout_url in cur_url:
-            return
-        #print("visitng url {}".format(cur_url))
+        if self.logout_url in cur_url or "setup" in cur_url or "security" in cur_url or "brute" in cur_url or "captcha" in cur_url or '.pdf' in cur_url:
+            return -1
+        print("visitng url {}".format(cur_url))
         """
         Result contains html in res.content among other 
         things like status code (res.status_code), etc. """
@@ -105,11 +154,13 @@ class crawler:
         #visit_queue = list(urls)
         #print(len(self.visit_queue))
         #print(res.status_code)
+        return 1
     
 
 
 def __main__():
-    a = crawler(INPUT,True,"hamid","12345","logout")
+    #a = crawler(INPUT,True,"hamid","12345","logout")
+    a = crawler(INPUT, True, "http://192.168.88.129/dvwa/login.php" , "admin", "password", "logout")
     a.handler()
 
 if __name__ == '__main__':
