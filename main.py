@@ -5,14 +5,16 @@ from requests_html import HTMLSession
 from bs4 import BeautifulSoup
 from packages.xss_fuzzer import XSS_TEST
 
+
 #INPUT = "https://www.google.com"
 #INPUT = "http://127.0.0.1:8000/home/"
-INPUT = "http://192.168.88.129/dvwa/index.php"
+INPUT = "http://192.168.88.132/dvwa/index.php"
 class crawler:
     def __init__(self, root_url, login_required=False, login_url="", login_username=None, login_password=None, logout_url="\\\\") -> None:
         self.root_url = root_url
         self.login_url = login_url
         self.logout_url = logout_url
+        self.illegal_urls = ['setup','security','brute','csrf']
         self.visited = set()
         self.visit_queue = set()
         self.visit_queue.add(root_url)
@@ -66,13 +68,14 @@ class crawler:
         else:
             login_data = dict(username=username, password=password)
         """
-        login_data = dict(username=username, password=password, user_token=csrftoken, Login="Login")
+        #login_data = dict(username=username, password=password, user_token=csrftoken, Login="Login")
+        login_data = dict(username=username, password=password,  Login="Login")
         print(login_data)
         r = self.session.post(self.login_url, data=login_data, headers=dict(Referer=self.login_url))
         print(self.session.cookies.get_dict())
 
         # Change security to low
-        resp = self.session.get("http://192.168.88.129/dvwa/security.php")
+        resp = self.session.get("http://192.168.88.132/dvwa/security.php")
         
         soup = BeautifulSoup(resp.content, 'lxml')
         forms = soup.find_all('form')
@@ -88,11 +91,10 @@ class crawler:
                     csrftoken = form_csrf
                     break
             
-        login_data = dict(security='low', seclev_submit='Submit', user_token=csrftoken)
-        self.session.post("http://192.168.88.129/dvwa/security.php", data=login_data, headers=dict(Referer=self.root_url))
+        #login_data = dict(security='low', seclev_submit='Submit', user_token=csrftoken)
+        login_data = dict(security='low', seclev_submit='Submit')
+        self.session.post("http://192.168.88.132/dvwa/security.php", data=login_data, headers=dict(Referer=self.root_url))
         print(self.session.cookies.get_dict())
-        print(self.session.get("http://192.168.88.129/dvwa/vulnerabilities/xss_r/?name=<script>document.title=\'empty\';</script>#").html.render())
-        exit()
 
     def handler(self):
         while len(self.visit_queue) > 0:
@@ -107,7 +109,7 @@ class crawler:
 
     def __engine(self, cur_url):
         # Do not visit logout url
-        if self.logout_url in cur_url or "setup" in cur_url or "security" in cur_url or "brute" in cur_url or "captcha" in cur_url or '.pdf' in cur_url:
+        if self.logout_url in cur_url or any(illegal_url in cur_url for illegal_url in self.illegal_urls):
             return -1
         print("visitng url {}".format(cur_url))
         """
@@ -160,7 +162,7 @@ class crawler:
 
 def __main__():
     #a = crawler(INPUT,True,"hamid","12345","logout")
-    a = crawler(INPUT, True, "http://192.168.88.129/dvwa/login.php" , "admin", "password", "logout")
+    a = crawler(INPUT, True, "http://192.168.88.132/dvwa/login.php" , "admin", "password", "logout")
     a.handler()
 
 if __name__ == '__main__':
