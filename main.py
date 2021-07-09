@@ -10,11 +10,12 @@ from packages.xss_fuzzer import XSS_TEST
 #INPUT = "http://127.0.0.1:8000/home/"
 INPUT = "http://192.168.88.132/dvwa/index.php"
 class crawler:
-    def __init__(self, root_url, login_required=False, login_url="", login_username=None, login_password=None, logout_url="\\\\") -> None:
+    def __init__(self, root_url, illegal_urls, has_csrf, csrf_token_name="", login_required=False, login_url="", login_data=None) -> None:
         self.root_url = root_url
         self.login_url = login_url
-        self.logout_url = logout_url
-        self.illegal_urls = ['setup','security','brute','csrf']
+        self.illegal_urls = illegal_urls
+        self.has_csrf = has_csrf
+        self.csrf_token_name = csrf_token_name
         self.visited = set()
         self.visit_queue = set()
         self.visit_queue.add(root_url)
@@ -33,26 +34,26 @@ class crawler:
 
         # Login if the web app requires login
         if login_required:
-            self.__login(login_username, login_password)
+            self.__login(login_data)
 
-    def __login(self, username, password, email=""):
-        #self.session = requests.Session()
+    def __login(self, login_data):
         resp = self.session.get(self.login_url)
 
-        
-        soup = BeautifulSoup(resp.content, 'lxml')
-        forms = soup.find_all('form')
-        for form in forms:
-            inputs = form.find_all('input')
-            for input in inputs:
-                try:
-                    input_name = str(input["name"])
-                except:
-                    continue
-                if "token" in input_name or "csrf" in input_name:
-                    form_csrf = input["value"]
-                    csrftoken = form_csrf
-                    break
+        if self.has_csrf:
+            soup = BeautifulSoup(resp.content, 'lxml')
+            forms = soup.find_all('form')
+            for form in forms:
+                inputs = form.find_all('input')
+                for input in inputs:
+                    try:
+                        input_name = str(input["name"])
+                    except:
+                        continue
+                    if self.csrf_token_name in input_name:
+                        form_csrf = input["value"]
+                        csrftoken = form_csrf
+                        break
+            login_data[self.csrf_token_name] = csrftoken
         
         """
         if 'csrftoken' in self.session.cookies:
@@ -68,11 +69,8 @@ class crawler:
         else:
             login_data = dict(username=username, password=password)
         """
-        #login_data = dict(username=username, password=password, user_token=csrftoken, Login="Login")
-        login_data = dict(username=username, password=password,  Login="Login")
         print(login_data)
         r = self.session.post(self.login_url, data=login_data, headers=dict(Referer=self.login_url))
-        print(self.session.cookies.get_dict())
 
         # Change security to low
         resp = self.session.get("http://192.168.88.132/dvwa/security.php")
@@ -91,7 +89,6 @@ class crawler:
                     csrftoken = form_csrf
                     break
             
-        #login_data = dict(security='low', seclev_submit='Submit', user_token=csrftoken)
         login_data = dict(security='low', seclev_submit='Submit')
         self.session.post("http://192.168.88.132/dvwa/security.php", data=login_data, headers=dict(Referer=self.root_url))
         print(self.session.cookies.get_dict())
@@ -104,12 +101,12 @@ class crawler:
             if len(self.visited) > 20:
                 break
         print(self.visited)
-        self.xss_fuzzer = XSS_TEST(self.visited, self.session)
+        self.xss_fuzzer = XSS_TEST(self.visited, self.session, self.has_csrf, self.csrf_token_name)
         self.xss_fuzzer.handler()
 
     def __engine(self, cur_url):
-        # Do not visit logout url
-        if self.logout_url in cur_url or any(illegal_url in cur_url for illegal_url in self.illegal_urls):
+        # Do not visit illegal url
+        if any(illegal_url in cur_url for illegal_url in self.illegal_urls):
             return -1
         print("visitng url {}".format(cur_url))
         """
@@ -159,10 +156,26 @@ class crawler:
         return 1
     
 
-
 def __main__():
-    #a = crawler(INPUT,True,"hamid","12345","logout")
-    a = crawler(INPUT, True, "http://192.168.88.132/dvwa/login.php" , "admin", "password", "logout")
+    login_data = {
+        'username'  : 'admin',
+        'password'  : 'password',
+        'Login'     : 'Login,',
+    }
+
+    # Fill in keywords or urls that you want to exclude from crawling
+    illegals = ['setup','security','brute','csrf','logout']
+
+
+    has_csrf = input("Do forms in the target website have CSRF tokens?(y/n)")[0]
+    csrf_token_name = ""
+    if has_csrf == 'y':
+        has_csrf = True
+        csrf_token_name = input("What's the name of the csrf tokens in the target website?")
+    else:
+        has_csrf = False
+    
+    a = crawler(INPUT, illegals, has_csrf, csrf_token_name, True, "http://192.168.88.132/dvwa/login.php", login_data)
     a.handler()
 
 if __name__ == '__main__':
