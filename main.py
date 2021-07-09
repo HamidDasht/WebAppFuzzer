@@ -3,7 +3,7 @@ from urllib.parse import urlparse
 from urllib.parse import urljoin
 from requests_html import HTMLSession
 from bs4 import BeautifulSoup
-from packages.xss_fuzzer import XSS_TEST
+from packages.xss_fuzzer import Fuzzer
 
 
 #INPUT = "https://www.google.com"
@@ -76,7 +76,7 @@ class crawler:
             if len(self.visited) > 20:
                 break
         print(self.visited)
-        self.xss_fuzzer = XSS_TEST(self.visited, self.session, self.has_csrf, self.csrf_token_name)
+        self.xss_fuzzer = Fuzzer(self.visited, self.session, self.has_csrf, self.csrf_token_name)
         self.xss_fuzzer.handler()
 
     def __engine(self, cur_url):
