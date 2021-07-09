@@ -12,7 +12,7 @@ from selenium.webdriver.common.keys import Keys
 from seleniumrequests import Chrome
 
 class XSS_TEST:
-    def __init__(self, urls: list, session, has_csrf: bool, csrf_token_name: str) -> None:
+    def __init__(self, urls: set, session, has_csrf, csrf_token_name) -> None:
         self.webpages = urls
         self.session = session
         self.has_csrf = has_csrf
@@ -21,12 +21,12 @@ class XSS_TEST:
 
         # Initialize Selenium driver (capable of running JavaScript)
         chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.headless = True # also works
+        #chrome_options.add_argument("--headless")
+        #chrome_options.headless = True # also works
         chrome_options.add_argument("--enable-javascript")
         self.driver = Chrome(options=chrome_options)
         self.driver.implicitly_wait(10)
-        self.driver.get("http://192.168.88.132/dvwa/")
+        self.driver.get(list(urls)[0])
         self.driver.delete_all_cookies()
 
         # Export current session cookies to Selenium
@@ -93,9 +93,9 @@ class XSS_TEST:
         if title != "empty":
             new_title = "\'empty\';"
         else:
-            new_title = "\'emp\'"
-        self.payloads = ["<script>document.title={}</script>".format(new_title)]
-                         #"",
+            new_title = "\'emp\';"
+        self.payloads = ["<script>document.title={}</script>".format(new_title),
+                         ";document.title={}".format(new_title)]
                          #""
                         #]
         

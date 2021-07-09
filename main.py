@@ -7,8 +7,10 @@ from packages.xss_fuzzer import XSS_TEST
 
 
 #INPUT = "https://www.google.com"
-#INPUT = "http://127.0.0.1:8000/home/"
-INPUT = "http://192.168.88.132/dvwa/index.php"
+TA_ROOT = "http://127.0.0.1:8000/home/"
+TA_LOGIN = "http://127.0.0.1:8000/home/"
+DVWA_ROOT = "http://192.168.88.132/dvwa/index.php"
+DVWA_LOGIN = "http://192.168.88.132/dvwa/login.php"
 class crawler:
     def __init__(self, root_url, illegal_urls, has_csrf, csrf_token_name="", login_required=False, login_url="", login_data=None) -> None:
         self.root_url = root_url
@@ -55,42 +57,15 @@ class crawler:
                         break
             login_data[self.csrf_token_name] = csrftoken
         
-        """
-        if 'csrftoken' in self.session.cookies:
-            csrftoken = self.session.cookies['csrftoken']
-        elif 'csrf' in self.session.cookies:
-            csrftoken = self.session.cookies['csrf']
-        elif 'user_token' in self.session.cookies:
-            csrftoken = self.session.cookies['user_token']
-        if 'csrftoken' in self.session.cookies or 'csrf' in self.session.cookies:
-            login_data = dict(username=username, password=password, csrfmiddlewaretoken=csrftoken)
-        elif 'user_token' in self.session.cookies:
-            login_data = dict(username=username, password=password, user_token=csrftoken, Login="Login")
-        else:
-            login_data = dict(username=username, password=password)
-        """
         print(login_data)
         r = self.session.post(self.login_url, data=login_data, headers=dict(Referer=self.login_url))
 
-        # Change security to low
-        resp = self.session.get("http://192.168.88.132/dvwa/security.php")
+        # Change security to low for DVWA test
+        if self.root_url in DVWA_ROOT:
+            resp = self.session.get("http://192.168.88.132/dvwa/security.php")    
+            data = dict(security='low', seclev_submit='Submit')
+            self.session.post("http://192.168.88.132/dvwa/security.php", data=data, headers=dict(Referer=self.root_url))
         
-        soup = BeautifulSoup(resp.content, 'lxml')
-        forms = soup.find_all('form')
-        for form in forms:
-            inputs = form.find_all('input')
-            for input in inputs:
-                try:
-                    input_name = str(input["name"])
-                except:
-                    continue
-                if "token" in input_name or "csrf" in input_name:
-                    form_csrf = input["value"]
-                    csrftoken = form_csrf
-                    break
-            
-        login_data = dict(security='low', seclev_submit='Submit')
-        self.session.post("http://192.168.88.132/dvwa/security.php", data=login_data, headers=dict(Referer=self.root_url))
         print(self.session.cookies.get_dict())
 
     def handler(self):
@@ -156,27 +131,77 @@ class crawler:
         return 1
     
 
-def __main__():
-    login_data = {
-        'username'  : 'admin',
-        'password'  : 'password',
-        'Login'     : 'Login,',
+ta_login_data = {
+    'username'  : 'hamid',
+    'password'  : '12345'
     }
+
+dvwa_login_data = {
+    'username'  : 'admin',
+    'password'  : 'password',
+    'Login'     : 'Login'
+    }
+
+custom_login_data = {
+
+}
+
+def __main__():
+    
+    # Get target website's urls and login information
+    root_url, login_required, login_url, login_data, has_csrf, csrf_token_name = get_target_info()
 
     # Fill in keywords or urls that you want to exclude from crawling
     illegals = ['setup','security','brute','csrf','logout']
+    
+    a = crawler(root_url, illegals, has_csrf, csrf_token_name, login_required, login_url, login_data)
+    a.handler()
 
+
+def get_target_info():
+    while 1:
+        try:
+            target = int(input("Choose your target:\n\t1. DVWA\n\t2. TA\n\t3. Custom\n"))
+        except:
+            print("ERROR: Input must be an integer")
+            continue
+        if target == 1:
+            root_url = DVWA_ROOT
+            login_required = True
+            login_url = DVWA_LOGIN
+            login_data = dvwa_login_data
+            break
+        elif target == 2:
+            root_url = TA_ROOT
+            login_required = True
+            login_url = TA_LOGIN
+            login_data = ta_login_data
+            break
+        elif target == 3:
+            root_url = input("Enter root url in [http(s)://*] format: ")
+            login_required = input("Do forms in the target website have CSRF tokens?(y/n)")[0]
+            login_data = custom_login_data
+
+            if login_required == 'y':
+                login_required = True
+                login_url = input("Enter login url in [http(s)://*] format: ")
+            else:
+                login_required = False
+                login_url = ""
+            break
+        else:
+            print("ERROR: Input must be 1, 2 or 3")
+            continue
 
     has_csrf = input("Do forms in the target website have CSRF tokens?(y/n)")[0]
     csrf_token_name = ""
     if has_csrf == 'y':
         has_csrf = True
-        csrf_token_name = input("What's the name of the csrf tokens in the target website?")
+        csrf_token_name = input("Enter name of the csrf tokens in the target website: ")
     else:
         has_csrf = False
     
-    a = crawler(INPUT, illegals, has_csrf, csrf_token_name, True, "http://192.168.88.132/dvwa/login.php", login_data)
-    a.handler()
+    return root_url, login_required, login_url, login_data, has_csrf, csrf_token_name
 
 if __name__ == '__main__':
     __main__()
