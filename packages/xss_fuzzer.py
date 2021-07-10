@@ -46,9 +46,21 @@ class Fuzzer:
         try:
             resp = self.session.get(page, allow_redirects=True)
             soup = BeautifulSoup(resp.content, 'lxml')
-            page_title = soup.title.text
+            try:
+                page_title = soup.title.text
+            except:
+                page_title = ""
         except:
-            return None, None
+            try:
+                self.driver.get(page)
+                soup = BeautifulSoup(self.driver.page_source,'lxml')
+                try:
+                    page_title = soup.title.text
+                except:
+                    page_title = ""
+            except:
+                print(Fore.YELLOW + "Coudn't get form" + Fore.WHITE)
+                return None, None
 
         
         forms = list(soup.find_all('form'))
@@ -91,10 +103,13 @@ class Fuzzer:
     def __test_payload(self, form, page: str, inputs: list, form_action: str, form_method: str, title:str) -> None:
         xss_engigne = XSS_TEST(self.driver, self.has_csrf, self.csrf_token_name)
         os_command_engine = OS_COMMAND_TEST(self.driver, self.has_csrf, self.csrf_token_name)
-        #xss_engigne.gen_payload(title)
-        #xss_engigne.test(form, page, inputs, form_action, form_method)
-        os_command_engine.gen_payload()
-        os_command_engine.test(form, page, inputs, form_action, form_method)
+        sqli_engine = SQLI_TEST(self.driver, self.has_csrf, self.csrf_token_name)
+        xss_engigne.gen_payload(title)
+        xss_engigne.test(form, page, inputs, form_action, form_method)
+        #os_command_engine.gen_payload()
+        #os_command_engine.test(form, page, inputs, form_action, form_method)
+        #sqli_engine.gen_payload()
+        #sqli_engine.test(form, page, inputs, form_action, form_method)
 
 
 
@@ -106,7 +121,6 @@ class TEST:
         
 
 class XSS_TEST(TEST):
-
     def test(self, form, page: str, inputs: list, form_action: str, form_method: str):
         for payload in self.payloads:
             self.driver.get(page)
@@ -130,7 +144,7 @@ class XSS_TEST(TEST):
                     inputs_value[input_name] = form_csrf
                     continue
                 
-                if  input.name == 'textarea' or input['type'] == 'text':
+                if  input.name == 'textarea' or input['type'] == 'text' or input['type'] == 'password':
                     inputs_value[input_name] = payload
                 else:
                     try:
@@ -165,7 +179,12 @@ class XSS_TEST(TEST):
                         sub_btn = key
                         continue
                     else:
-                        item.send_keys(value)
+                        try:
+                            item.send_keys(value)
+                        except:
+                            print(Fore.YELLOW + "Couldn't fill in the input" + Fore.WHITE)
+                            # Form not submitable
+                            return
 
                 # If a submit btn was found submit the form and save the response
                 # Otherwise issue an error and ignore the form.
@@ -239,7 +258,7 @@ class OS_COMMAND_TEST(TEST):
                     inputs_value[input_name] = form_csrf
                     continue
                 
-                if  input.name == 'textarea' or input['type'] == 'text':
+                if  input.name == 'textarea' or input['type'] == 'text' or input['type'] == 'password':
                     inputs_value[input_name] = payload
                 else:
                     try:
@@ -274,7 +293,12 @@ class OS_COMMAND_TEST(TEST):
                         sub_btn = key
                         continue
                     else:
-                        item.send_keys(value)
+                        try:
+                            item.send_keys(value)
+                        except:
+                            print(Fore.YELLOW + "Couldn't fill in the input" + Fore.WHITE)
+                            # Form not submitable
+                            return
 
                 # If a submit btn was found submit the form and save the response
                 # Otherwise issue an error and ignore the form.
@@ -324,8 +348,120 @@ class OS_COMMAND_TEST(TEST):
                          "& sleep {}".format(self.sleep_delay)]
 
 class SQLI_TEST(TEST):
-    def test():
-        pass
+    def test(self, form, page: str, inputs: list, form_action: str, form_method: str):
+        for payload in self.payloads:
+            self.driver.get(page)
+            # Referesh inputs to update CSRF tokens
+            if self.has_csrf:
+                resp = self.driver.page_source
+                soup = BeautifulSoup(resp, 'lxml')
+                form = soup.find('form', form.attrs)
+                inputs = form.find_all('input') + form.find_all('textarea')
+
+            inputs_value = dict() # Used to save input tags' name and value
+
+            # Parse input fields and put vulnebrable payload
+            for input in inputs:
+                try:
+                    input_name = str(input["name"])
+                except:
+                    continue
+                if self.has_csrf and self.csrf_token_name in input_name:
+                    form_csrf = input["value"]
+                    inputs_value[input_name] = form_csrf
+                    continue
+                
+                if  input.name == 'textarea' or input['type'] == 'text' or input['type'] == 'password':
+                    inputs_value[input_name] = payload
+                else:
+                    try:
+                        inputs_value[input_name] = input["value"]
+                    except:
+                        continue
+            
+            req_url = urljoin(page, form_action)
+            print("\t\tForm at {} with {} inputs".format(req_url, inputs_value))
+
+            if form_method.lower() == "post":
+                sub_btn = ""
+                print(inputs_value.items())
+                for key,value in inputs_value.items():
+                    item = self.driver.find_element_by_name(key)
+                    # If Payload is larger than input's size
+                    # put small payload instead of payload
+                    try:
+                        if (int(item.get_attribute('maxlength') )< len(payload)):
+                            item.send_keys('a')
+                            continue
+                    except:
+                        pass
+                        
+                    # If the element is a submit btn or a submit-type btn 
+                    # save it for submission and continue to the next input.
+                    # Otherwise fill input with appropriate value.
+                    if 'submit' in key.lower().strip():
+                        sub_btn = key
+                        continue
+                    elif item.get_attribute("type").lower().strip() == "submit":
+                        sub_btn = key
+                        continue
+                    else:
+                        try:
+                            item.send_keys(value)
+                        except:
+                            print(Fore.YELLOW + "Couldn't fill in the input" + Fore.WHITE)
+                            # Form not submitable
+                            return
+
+                # If a submit btn was found submit the form and save the response
+                # Otherwise issue an error and ignore the form.
+                try:
+                    if len(sub_btn):
+                        tic = time.perf_counter()
+                        self.driver.find_element_by_name(sub_btn).click()
+                        toc = time.perf_counter()
+                        resp = self.driver.page_source
+                    else:
+                        print(Fore.YELLOW + "Couldn't find form submit btn" + Fore.WHITE)
+                        return
+                # An error occured during submission
+                except:
+                    print(Fore.YELLOW + "Connection error at {}".format(req_url) + Fore.WHITE)
+                    print(inputs_value)
+                    return
+            
+            elif form_method.lower() == "get":
+                try:
+                    # Append GET parameters to the page's url
+                    req_url_with_params =req_url+"?" + urlencode(inputs_value)
+                    print(Fore.GREEN + req_url_with_params + Fore.WHITE)
+                    tic = time.perf_counter()
+                    self.driver.get(req_url_with_params)
+                    toc = time.perf_counter()
+                    resp = self.driver.page_source
+                # An error occured during submission
+                except:
+                    print("Connection error at {}".format(req_url))
+                    print(inputs_value)
+                    return
+
+
+            # Check form submission's response for Vulnerability or failure
+            try:
+                if toc - tic > self.sleep_delay: # SQL Injection IS PRESENT
+                    print(Fore.RED + "FOUND SQL Injection (Blind) VULNERABILITY AT {}\nIN FORM {}".format(page, form) + Fore.WHITE)
+                    return
+            except:
+                print(Fore.YELLOW + "ERROR AT FORM Submission" + Fore.WHITE)
     
     def gen_payload(self):
-        pass
+        self.sleep_delay = 4
+        self.payloads = ["';waitfor delay '0:0:{}'#".format(self.sleep_delay),
+                         ";waitfor delay '0:0:{}'#".format(self.sleep_delay),
+                         "';waitfor delay '0:0:{}'//".format(self.sleep_delay),
+                         ";waitfor delay '0:0:{}'//".format(self.sleep_delay),
+                         "' or sleep({})#".format(self.sleep_delay),
+                         "or sleep({})#".format(self.sleep_delay),
+                         "'or sleep({})//".format(self.sleep_delay),
+                         "'or sleep({})//".format(self.sleep_delay),
+                         ]

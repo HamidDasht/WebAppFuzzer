@@ -6,11 +6,30 @@ from bs4 import BeautifulSoup
 from packages.xss_fuzzer import Fuzzer
 
 
-#INPUT = "https://www.google.com"
+# Fill in keywords or urls that you want to exclude from crawling
+illegals = ['setup','security','brute','csrf','logout','.pdf','.mp4']
+
+ta_login_data = {
+    'username'  : 'mmz',
+    'password'  : '12345'
+    }
+
+dvwa_login_data = {
+    'username'  : 'admin',
+    'password'  : 'password',
+    'Login'     : 'Login'
+    }
+
+custom_login_data = {
+
+}
+
 TA_ROOT = "http://127.0.0.1:8000/home/"
 TA_LOGIN = "http://127.0.0.1:8000/home/"
 DVWA_ROOT = "http://192.168.88.132/dvwa/index.php"
 DVWA_LOGIN = "http://192.168.88.132/dvwa/login.php"
+CRAWLER_LIMIT = 20 
+
 class crawler:
     def __init__(self, root_url, illegal_urls, has_csrf, csrf_token_name="", login_required=False, login_url="", login_data=None) -> None:
         self.root_url = root_url
@@ -73,7 +92,7 @@ class crawler:
             url_to_visit = self.visit_queue.pop()
             if self.__engine(url_to_visit) != -1:
                 self.visited.add(url_to_visit)
-            if len(self.visited) > 20:
+            if len(self.visited) > CRAWLER_LIMIT:
                 break
         print(self.visited)
         self.xss_fuzzer = Fuzzer(self.visited, self.session, self.has_csrf, self.csrf_token_name)
@@ -130,29 +149,10 @@ class crawler:
         #print(res.status_code)
         return 1
     
-
-ta_login_data = {
-    'username'  : 'hamid',
-    'password'  : '12345'
-    }
-
-dvwa_login_data = {
-    'username'  : 'admin',
-    'password'  : 'password',
-    'Login'     : 'Login'
-    }
-
-custom_login_data = {
-
-}
-
 def __main__():
     
     # Get target website's urls and login information
     root_url, login_required, login_url, login_data, has_csrf, csrf_token_name = get_target_info()
-
-    # Fill in keywords or urls that you want to exclude from crawling
-    illegals = ['setup','security','brute','csrf','logout']
     
     a = crawler(root_url, illegals, has_csrf, csrf_token_name, login_required, login_url, login_data)
     a.handler()
@@ -179,7 +179,7 @@ def get_target_info():
             break
         elif target == 3:
             root_url = input("Enter root url in [http(s)://*] format: ")
-            login_required = input("Do forms in the target website have CSRF tokens?(y/n)")[0]
+            login_required = input("Is login required?(y/n)")[0]
             login_data = custom_login_data
 
             if login_required == 'y':
