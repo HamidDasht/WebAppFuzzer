@@ -22,23 +22,27 @@ class Fuzzer:
 
         # Initialize Selenium driver (capable of running JavaScript)
         chrome_options = Options()
-        #chrome_options.add_argument("--headless")
-        #chrome_options.headless = True # also works
+        chrome_options.add_argument("--headless")
+        chrome_options.headless = True
         chrome_options.add_argument("--enable-javascript")
         self.driver = Chrome(options=chrome_options)
         self.driver.implicitly_wait(10)
         self.driver.get(list(urls)[0])
         self.driver.delete_all_cookies()
 
+        self.xss_engigne = XSS_TEST(self.driver, self.has_csrf, self.csrf_token_name)
+        self.os_command_engine = OS_COMMAND_TEST(self.driver, self.has_csrf, self.csrf_token_name)
+        self.sqli_engine = SQLI_TEST(self.driver, self.has_csrf, self.csrf_token_name) 
+
         # Export current session cookies to Selenium
         cookie_dict = self.session.cookies.get_dict()
         for key, value in cookie_dict.items():
-            print('name', key, 'value',value)
+            #print('name', key, 'value',value)
             self.driver.add_cookie({'name' : key, 'value' : value})
-        print(self.session.cookies.get_dict())
+        #print(self.session.cookies.get_dict())
         
     def handler(self):
-        self.__check_xss()
+        self.__check_vulns()
 
     
     def __find_forms(self, page) -> list and str:
@@ -67,7 +71,7 @@ class Fuzzer:
         print("\tFound {} number of form(s)".format(len(forms)))
         return forms, page_title
 
-    def __check_xss(self):
+    def __check_vulns(self):
         for page in self.webpages:
             forms, title = self.__find_forms(page)
             # If the page has no forms continue to the next one
@@ -101,16 +105,18 @@ class Fuzzer:
                 
         
     def __test_payload(self, form, page: str, inputs: list, form_action: str, form_method: str, title:str) -> None:
-        xss_engigne = XSS_TEST(self.driver, self.has_csrf, self.csrf_token_name)
-        os_command_engine = OS_COMMAND_TEST(self.driver, self.has_csrf, self.csrf_token_name)
-        sqli_engine = SQLI_TEST(self.driver, self.has_csrf, self.csrf_token_name)
-        xss_engigne.gen_payload(title)
-        xss_engigne.test(form, page, inputs, form_action, form_method)
-        #os_command_engine.gen_payload()
-        #os_command_engine.test(form, page, inputs, form_action, form_method)
-        #sqli_engine.gen_payload()
-        #sqli_engine.test(form, page, inputs, form_action, form_method)
+        self.xss_engigne.gen_payload(title)
+        self.os_command_engine.gen_payload()
+        self.sqli_engine.gen_payload()
 
+        self.xss_engigne.test(form, page, inputs, form_action, form_method)
+        self.driver.implicitly_wait(10)
+        
+        self.os_command_engine.test(form, page, inputs, form_action, form_method)
+        self.driver.implicitly_wait(10)
+        
+        self.sqli_engine.test(form, page, inputs, form_action, form_method)
+        self.driver.implicitly_wait(10)
 
 
 class TEST:
@@ -205,7 +211,7 @@ class XSS_TEST(TEST):
                 try:
                     # Append GET parameters to the page's url
                     req_url_with_params =req_url+"?" + urlencode(inputs_value)
-                    print(Fore.GREEN + req_url_with_params + Fore.WHITE)
+                    print(Fore.GREEN + "\t" + req_url_with_params + Fore.WHITE)
                     self.driver.get(req_url_with_params)
                     resp = self.driver.page_source
                 # An error occured during submission
@@ -221,7 +227,9 @@ class XSS_TEST(TEST):
                 soup = BeautifulSoup(resp, 'lxml')
                 print("\t\t\tResponses title is: ", soup.title.text)
                 if soup.title.text == "emp" or soup.title.text == "empty": # XSS IS PRESENT
-                    print(Fore.RED + "FOUND XSS VULNERABILITY AT {}\nIN FORM {}".format(page, form) + Fore.WHITE)
+                    print(Fore.RED + "\tFOUND XSS VULNERABILITY AT {}\nIN FORM {} \
+                    \n\tWITH PAYLOAD {}".format(page, form, payload) + Fore.WHITE)
+                    return
             except:
                 print(Fore.YELLOW + "ERROR AT FORM Submission" + Fore.WHITE)
 
@@ -232,7 +240,8 @@ class XSS_TEST(TEST):
         else:
             new_title = "\'emp\';"
         self.payloads = ["<script>document.title={}</script>".format(new_title),
-                         ";document.title={}".format(new_title)]
+                         ";document.title={}".format(new_title)
+                         ]
 
 class OS_COMMAND_TEST(TEST):
     def test(self, form, page: str, inputs: list, form_action: str, form_method: str):
@@ -321,7 +330,7 @@ class OS_COMMAND_TEST(TEST):
                 try:
                     # Append GET parameters to the page's url
                     req_url_with_params =req_url+"?" + urlencode(inputs_value)
-                    print(Fore.GREEN + req_url_with_params + Fore.WHITE)
+                    print(Fore.GREEN +  "\t" +  req_url_with_params + Fore.WHITE)
                     tic = time.perf_counter()
                     self.driver.get(req_url_with_params)
                     toc = time.perf_counter()
@@ -336,7 +345,8 @@ class OS_COMMAND_TEST(TEST):
             # Check form submission's response for Vulnerability or failure
             try:
                 if toc - tic > self.sleep_delay: # OS Command Injection IS PRESENT
-                    print(Fore.RED + "FOUND OS Command Injection VULNERABILITY AT {}\nIN FORM {}".format(page, form) + Fore.WHITE)
+                    print(Fore.RED + "\tFOUND OS Command Injection VULNERABILITY AT {}\nIN FORM {} \
+                    \n\tWITH PAYLOAD {}".format(page, form, payload) + Fore.WHITE)
                     return
             except:
                 print(Fore.YELLOW + "ERROR AT FORM Submission" + Fore.WHITE)
@@ -434,7 +444,7 @@ class SQLI_TEST(TEST):
                 try:
                     # Append GET parameters to the page's url
                     req_url_with_params =req_url+"?" + urlencode(inputs_value)
-                    print(Fore.GREEN + req_url_with_params + Fore.WHITE)
+                    print(Fore.GREEN +  "\t" +  req_url_with_params + Fore.WHITE)
                     tic = time.perf_counter()
                     self.driver.get(req_url_with_params)
                     toc = time.perf_counter()
@@ -449,7 +459,8 @@ class SQLI_TEST(TEST):
             # Check form submission's response for Vulnerability or failure
             try:
                 if toc - tic > self.sleep_delay: # SQL Injection IS PRESENT
-                    print(Fore.RED + "FOUND SQL Injection (Blind) VULNERABILITY AT {}\nIN FORM {}".format(page, form) + Fore.WHITE)
+                    print(Fore.RED + "\tFOUND SQL Injection (Blind) VULNERABILITY AT {}\n\tIN FORM {} \
+                    \n\tWITH PAYLOAD {}".format(page, form, payload) + Fore.WHITE)
                     return
             except:
                 print(Fore.YELLOW + "ERROR AT FORM Submission" + Fore.WHITE)

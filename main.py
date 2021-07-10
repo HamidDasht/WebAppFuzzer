@@ -3,6 +3,7 @@ from urllib.parse import urlparse
 from urllib.parse import urljoin
 from requests_html import HTMLSession
 from bs4 import BeautifulSoup
+from colorama import Fore
 from packages.xss_fuzzer import Fuzzer
 
 
@@ -51,7 +52,7 @@ class crawler:
             self.target_domain = target_url_parsed.netloc[4:]
         else:
             self.target_domain = target_url_parsed.netloc
-        print(self.target_domain)
+        print(Fore.GREEN + "Targeting " + self.target_domain + " domain" + Fore.WHITE)
 
         # Login if the web app requires login
         if login_required:
@@ -76,7 +77,9 @@ class crawler:
                         break
             login_data[self.csrf_token_name] = csrftoken
         
-        print(login_data)
+        print(Fore.GREEN + "Login Data:", end="")
+        print( login_data,end="" )
+        print(Fore.WHITE)
         r = self.session.post(self.login_url, data=login_data, headers=dict(Referer=self.login_url))
 
         # Change security to low for DVWA test
@@ -85,7 +88,7 @@ class crawler:
             data = dict(security='low', seclev_submit='Submit')
             self.session.post("http://192.168.88.132/dvwa/security.php", data=data, headers=dict(Referer=self.root_url))
         
-        print(self.session.cookies.get_dict())
+        #print(self.session.cookies.get_dict())
 
     def handler(self):
         while len(self.visit_queue) > 0:
@@ -94,7 +97,6 @@ class crawler:
                 self.visited.add(url_to_visit)
             if len(self.visited) > CRAWLER_LIMIT:
                 break
-        print(self.visited)
         self.xss_fuzzer = Fuzzer(self.visited, self.session, self.has_csrf, self.csrf_token_name)
         self.xss_fuzzer.handler()
 
